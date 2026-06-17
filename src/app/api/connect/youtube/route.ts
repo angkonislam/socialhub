@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-
-function appUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
+import { appUrl } from "@/lib/app-url";
 
 export async function GET() {
   const clientId = process.env.AUTH_GOOGLE_ID;

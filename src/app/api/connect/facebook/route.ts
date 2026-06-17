@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-
-/**
- * Start the real Facebook Page connect flow.
- * Redirects the browser to Facebook's OAuth dialog. A random `state` is
- * stored in an httpOnly cookie and verified in the callback (CSRF guard).
- */
+import { appUrl } from "@/lib/app-url";
 
 const GRAPH_VERSION = "v21.0";
-
-function appUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
 
 export async function GET() {
   const clientId = process.env.AUTH_FACEBOOK_ID;

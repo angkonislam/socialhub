@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getSessionUser } from "@/lib/demo-session";
 import { addAccount, listAccounts } from "@/lib/data";
-
-function appUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
+import { appUrl } from "@/lib/app-url";
 
 function back(params: Record<string, string>) {
   const url = new URL(`${appUrl()}/accounts`);
