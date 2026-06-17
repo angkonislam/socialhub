@@ -65,14 +65,16 @@ export async function GET(req: Request) {
     const llJson = await llRes.json();
     const finalToken: string = llJson.access_token ?? accessToken;
 
-    // 3. Get Instagram profile
-    const profileUrl = new URL(`https://graph.instagram.com/${igUserId}`);
+    // 3. Get Instagram profile (use /me with Business Login token)
+    const profileUrl = new URL("https://graph.instagram.com/me");
     profileUrl.searchParams.set("fields", "id,name,username,profile_picture_url");
     profileUrl.searchParams.set("access_token", finalToken);
     const profileRes = await fetch(profileUrl.toString(), { cache: "no-store" });
     const profile: IgProfile = await profileRes.json();
 
-    if (!profile.id) return back({ error: "ig_profile_failed" });
+    // Fallback: use igUserId if profile.id missing
+    const profileId = profile.id ?? igUserId;
+    if (!profileId) return back({ error: "ig_profile_failed" });
 
     // 4. Save account
     const { id: userId } = await getSessionUser();
@@ -81,7 +83,7 @@ export async function GET(req: Request) {
       existing.filter((a) => a.platform === "instagram").map((a) => a.external_id)
     );
 
-    if (existingIds.has(profile.id)) {
+    if (existingIds.has(profileId)) {
       return back({ connected: "instagram", count: "0" });
     }
 
@@ -89,7 +91,7 @@ export async function GET(req: Request) {
       user_id: userId,
       platform: "instagram",
       account_type: "instagram_business",
-      external_id: profile.id,
+      external_id: profileId,
       display_name: profile.name ?? profile.username ?? "Instagram Account",
       avatar_url: profile.profile_picture_url ?? null,
       access_token: finalToken,
