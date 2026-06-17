@@ -4,6 +4,8 @@ import { getSessionUser } from "@/lib/demo-session";
 import { addAccount, listAccounts } from "@/lib/data";
 import { appUrl } from "@/lib/app-url";
 
+const IG_GRAPH = "https://graph.instagram.com/v21.0";
+
 function back(params: Record<string, string>) {
   const url = new URL(`${appUrl()}/accounts`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -11,10 +13,33 @@ function back(params: Record<string, string>) {
 }
 
 interface IgProfile {
-  id: string;
+  id?: string;
   name?: string;
   username?: string;
+  account_type?: string;
   profile_picture_url?: string;
+}
+
+async function fetchProfile(token: string, userId: string): Promise<IgProfile> {
+  const fields = "id,name,username,account_type,profile_picture_url";
+
+  // Try explicit user-id endpoint first (more reliable than /me)
+  const byId = await fetch(
+    `${IG_GRAPH}/${userId}?fields=${fields}&access_token=${token}`,
+    { cache: "no-store" }
+  );
+  const byIdJson: IgProfile = await byId.json();
+  console.log("[IG profile by id]", JSON.stringify(byIdJson));
+  if (byIdJson.id) return byIdJson;
+
+  // Fallback to /me
+  const me = await fetch(
+    `${IG_GRAPH}/me?fields=${fields}&access_token=${token}`,
+    { cache: "no-store" }
+  );
+  const meJson: IgProfile = await me.json();
+  console.log("[IG profile /me]", JSON.stringify(meJson));
+  return meJson;
 }
 
 export async function GET(req: Request) {
@@ -36,7 +61,7 @@ export async function GET(req: Request) {
   const redirectUri = `${appUrl()}/api/connect/instagram/callback`;
 
   try {
-    // 1. Exchange code → short-lived access token
+    // 1. Exchange code → short-lived token
     const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -50,52 +75,43 @@ export async function GET(req: Request) {
       cache: "no-store",
     });
     const tokenJson = await tokenRes.json();
+    console.log("[IG short token]", JSON.stringify({ ok: tokenRes.ok, user_id: tokenJson.user_id, has_token: !!tokenJson.access_token }));
     if (!tokenRes.ok || !tokenJson.access_token) {
       return back({ error: "ig_token_failed" });
     }
-    const accessToken: string = tokenJson.access_token;
-    const igUserId: string = tokenJson.user_id;
+    const shortToken: string = tokenJson.access_token;
+    const igUserId: string = String(tokenJson.user_id ?? "");
 
     // 2. Exchange for long-lived token
-    const longLivedUrl = new URL("https://graph.instagram.com/access_token");
-    longLivedUrl.searchParams.set("grant_type", "ig_exchange_token");
-    longLivedUrl.searchParams.set("client_secret", clientSecret);
-    longLivedUrl.searchParams.set("access_token", accessToken);
-    const llRes = await fetch(longLivedUrl.toString(), { cache: "no-store" });
-    const llJson = await llRes.json();
-    const finalToken: string = llJson.access_token ?? accessToken;
-
-    // 3. Get Instagram profile (use /me with Business Login token)
-    const profileUrl = new URL("https://graph.instagram.com/me");
-    profileUrl.searchParams.set(
-      "fields",
-      "id,name,username,account_type,profile_picture_url"
+    const llRes = await fetch(
+      `${IG_GRAPH.replace("/v21.0", "")}/access_token?grant_type=ig_exchange_token&client_secret=${clientSecret}&access_token=${shortToken}`,
+      { cache: "no-store" }
     );
-    profileUrl.searchParams.set("access_token", finalToken);
-    const profileRes = await fetch(profileUrl.toString(), { cache: "no-store" });
-    const profile: IgProfile = await profileRes.json();
-    console.log("[Instagram profile]", JSON.stringify(profile));
+    const llJson = await llRes.json();
+    console.log("[IG long token]", JSON.stringify({ ok: llRes.ok, has_token: !!llJson.access_token, error: llJson.error }));
+    const finalToken: string = llJson.access_token ?? shortToken;
 
-    // Fallback chain: profile.id → igUserId from token exchange
+    // 3. Get profile — try user-id endpoint, fallback to /me
+    const profile = await fetchProfile(finalToken, igUserId);
+
     const profileId = profile.id ?? igUserId;
     if (!profileId) return back({ error: "ig_profile_failed" });
 
-    // 4. Save account
+    // 4. Deduplicate
     const { id: userId } = await getSessionUser();
     const existing = await listAccounts(userId);
     const existingIds = new Set(
       existing.filter((a) => a.platform === "instagram").map((a) => a.external_id)
     );
-
     if (existingIds.has(profileId)) {
       return back({ connected: "instagram", count: "0" });
     }
 
-    // Best available display name: full name → username → @id fallback
+    // Best display name: full name > @username > Instagram #{short id}
     const displayName =
       profile.name?.trim() ||
       (profile.username ? `@${profile.username}` : null) ||
-      `@${profileId}`;
+      `Instagram #${profileId.slice(-6)}`;
 
     await addAccount({
       user_id: userId,
