@@ -17,9 +17,9 @@ export function isYoutubeLive(): boolean {
   );
 }
 
-/** Instagram connects via the same Facebook OAuth flow. */
+/** Instagram Business Login — separate Instagram app credentials. */
 export function isInstagramLive(): boolean {
   return Boolean(
-    process.env.AUTH_FACEBOOK_ID && process.env.AUTH_FACEBOOK_SECRET
+    process.env.INSTAGRAM_APP_ID && process.env.INSTAGRAM_APP_SECRET
   );
 }

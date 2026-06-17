@@ -25,6 +25,13 @@ const OAUTH_ERRORS: Record<string, string> = {
   yt_bad_state: "Security check failed. Please try again.",
   yt_token_failed: "Could not get a YouTube access token.",
   yt_unexpected: "Unexpected error connecting to YouTube.",
+  ig_not_configured: "Instagram is not configured.",
+  ig_denied: "Instagram connection was cancelled.",
+  ig_missing_code: "Instagram returned no authorization code.",
+  ig_bad_state: "Security check failed. Please try again.",
+  ig_token_failed: "Could not get an Instagram access token.",
+  ig_profile_failed: "Could not load your Instagram profile.",
+  ig_unexpected: "Unexpected error connecting to Instagram.",
 };
 
 const CONNECTABLE: { platform: Platform; label: string }[] = [
@@ -64,6 +71,8 @@ export function AccountsManager({
       if (fbCount > 0) parts.push(`${fbCount} Facebook Page(s)`);
       if (ig && parseInt(ig) > 0) parts.push(`${ig} Instagram account(s)`);
       toast.success(parts.length ? `Connected: ${parts.join(" + ")}` : "Already connected");
+    } else if (connected === "instagram") {
+      toast.success(count && count !== "0" ? `Connected ${count} Instagram account(s)` : "Instagram already connected");
     } else if (connected === "youtube") {
       toast.success(count && count !== "0" ? `Connected ${count} YouTube Channel(s)` : "YouTube already connected");
     } else if (error) {
@@ -80,8 +89,7 @@ export function AccountsManager({
       return;
     }
     if (platform === "instagram" && instagramLive) {
-      // Instagram Business accounts are fetched via the Facebook OAuth flow
-      window.location.href = "/api/connect/facebook";
+      window.location.href = "/api/connect/instagram";
       return;
     }
     if (platform === "youtube" && youtubeLive) {
