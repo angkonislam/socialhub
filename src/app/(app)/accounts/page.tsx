@@ -1,6 +1,6 @@
 import { getSessionUser } from "@/lib/demo-session";
 import { listAccounts } from "@/lib/data";
-import { isFacebookLive, isYoutubeLive, isInstagramLive } from "@/lib/flags";
+import { isFacebookLive, isYoutubeLive, isInstagramLive, isTikTokLive, isTelegramLive } from "@/lib/flags";
 import { Topbar } from "@/components/topbar";
 import { AccountsManager } from "@/components/accounts-manager";
 
@@ -17,6 +17,8 @@ export default async function AccountsPage() {
           facebookLive={isFacebookLive()}
           youtubeLive={isYoutubeLive()}
           instagramLive={isInstagramLive()}
+          tiktokLive={isTikTokLive()}
+          telegramLive={isTelegramLive()}
         />
       </div>
     </>

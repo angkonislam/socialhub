@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Plus, Trash2, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -32,6 +32,13 @@ const OAUTH_ERRORS: Record<string, string> = {
   ig_token_failed: "Could not get an Instagram access token.",
   ig_profile_failed: "Could not load your Instagram profile.",
   ig_unexpected: "Unexpected error connecting to Instagram.",
+  tt_not_configured: "TikTok is not configured.",
+  tt_denied: "TikTok connection was cancelled.",
+  tt_missing_code: "TikTok returned no authorization code.",
+  tt_bad_state: "Security check failed. Please try again.",
+  tt_token_failed: "Could not get a TikTok access token.",
+  tt_profile_failed: "Could not load your TikTok profile.",
+  tt_unexpected: "Unexpected error connecting to TikTok.",
 };
 
 const CONNECTABLE: { platform: Platform; label: string }[] = [
@@ -48,16 +55,21 @@ export function AccountsManager({
   facebookLive = false,
   youtubeLive = false,
   instagramLive = false,
+  tiktokLive = false,
+  telegramLive = false,
 }: {
   initialAccounts: ConnectedAccount[];
   facebookLive?: boolean;
   youtubeLive?: boolean;
   instagramLive?: boolean;
+  tiktokLive?: boolean;
+  telegramLive?: boolean;
 }) {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingDisconnect, setPendingDisconnect] =
     useState<ConnectedAccount | null>(null);
+  const [showTelegramDialog, setShowTelegramDialog] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -75,6 +87,8 @@ export function AccountsManager({
       toast.success(count && count !== "0" ? `Connected ${count} Instagram account(s)` : "Instagram already connected");
     } else if (connected === "youtube") {
       toast.success(count && count !== "0" ? `Connected ${count} YouTube Channel(s)` : "YouTube already connected");
+    } else if (connected === "tiktok") {
+      toast.success(count && count !== "0" ? "TikTok account connected" : "TikTok already connected");
     } else if (error) {
       toast.error(OAUTH_ERRORS[error] ?? "Could not connect.");
     }
@@ -94,6 +108,14 @@ export function AccountsManager({
     }
     if (platform === "youtube" && youtubeLive) {
       window.location.href = "/api/connect/youtube";
+      return;
+    }
+    if (platform === "tiktok" && tiktokLive) {
+      window.location.href = "/api/connect/tiktok";
+      return;
+    }
+    if (platform === "telegram" && telegramLive) {
+      setShowTelegramDialog(true);
       return;
     }
     setBusy(platform);
@@ -136,6 +158,31 @@ export function AccountsManager({
     } finally {
       setBusy(null);
       setPendingDisconnect(null);
+    }
+  }
+
+  async function connectTelegram(botToken: string, channel: string) {
+    setBusy("telegram");
+    try {
+      const res = await fetch("/api/connect/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bot_token: botToken, channel }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error ?? "Could not connect Telegram channel");
+      } else if (json.already_connected) {
+        toast.info("Telegram channel already connected");
+      } else {
+        setAccounts((prev) => [json.account, ...prev]);
+        toast.success(`Connected ${json.account.display_name}`);
+      }
+    } catch {
+      toast.error("Network error while connecting Telegram");
+    } finally {
+      setBusy(null);
+      setShowTelegramDialog(false);
     }
   }
 
@@ -236,12 +283,97 @@ export function AccountsManager({
       <ConfirmDialog
         open={!!pendingDisconnect}
         title="Disconnect account?"
-        message={`“${pendingDisconnect?.display_name}” will be removed. You can reconnect it anytime.`}
+        message={`"${pendingDisconnect?.display_name}" will be removed. You can reconnect it anytime.`}
         confirmLabel="Disconnect"
         loading={busy === pendingDisconnect?.id}
         onConfirm={disconnect}
         onClose={() => setPendingDisconnect(null)}
       />
+
+      {showTelegramDialog && (
+        <TelegramConnectDialog
+          loading={busy === "telegram"}
+          onConnect={connectTelegram}
+          onClose={() => setShowTelegramDialog(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function TelegramConnectDialog({
+  loading,
+  onConnect,
+  onClose,
+}: {
+  loading: boolean;
+  onConnect: (botToken: string, channel: string) => void;
+  onClose: () => void;
+}) {
+  const botRef = useRef<HTMLInputElement>(null);
+  const chanRef = useRef<HTMLInputElement>(null);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const bot = botRef.current?.value.trim() ?? "";
+    const chan = chanRef.current?.value.trim() ?? "";
+    if (!bot || !chan) return;
+    onConnect(bot, chan);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Connect Telegram Channel</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <ol className="mb-5 space-y-1 text-sm text-muted-foreground list-decimal list-inside">
+          <li>Open Telegram, search <strong>@BotFather</strong>, send <code>/newbot</code></li>
+          <li>Copy the bot token BotFather gives you</li>
+          <li>Add the bot as an <strong>Admin</strong> of your channel</li>
+          <li>Enter the bot token and channel username below</li>
+        </ol>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Bot Token</label>
+            <input
+              ref={botRef}
+              type="password"
+              placeholder="123456:ABCdefGHI..."
+              autoComplete="off"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Channel Username</label>
+            <input
+              ref={chanRef}
+              type="text"
+              placeholder="@mychannel"
+              autoComplete="off"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              required
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Include the @ prefix</p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Connect
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

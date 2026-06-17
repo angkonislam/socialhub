@@ -23,3 +23,15 @@ export function isInstagramLive(): boolean {
     process.env.INSTAGRAM_APP_ID && process.env.INSTAGRAM_APP_SECRET
   );
 }
+
+/** TikTok for Developers OAuth credentials. */
+export function isTikTokLive(): boolean {
+  return Boolean(
+    process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET
+  );
+}
+
+/** Telegram bot connect — at least a default bot token configured. */
+export function isTelegramLive(): boolean {
+  return true; // user provides bot token per-channel in the connect dialog
+}
