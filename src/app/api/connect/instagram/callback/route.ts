@@ -67,12 +67,16 @@ export async function GET(req: Request) {
 
     // 3. Get Instagram profile (use /me with Business Login token)
     const profileUrl = new URL("https://graph.instagram.com/me");
-    profileUrl.searchParams.set("fields", "id,name,username,profile_picture_url");
+    profileUrl.searchParams.set(
+      "fields",
+      "id,name,username,account_type,profile_picture_url"
+    );
     profileUrl.searchParams.set("access_token", finalToken);
     const profileRes = await fetch(profileUrl.toString(), { cache: "no-store" });
     const profile: IgProfile = await profileRes.json();
+    console.log("[Instagram profile]", JSON.stringify(profile));
 
-    // Fallback: use igUserId if profile.id missing
+    // Fallback chain: profile.id → igUserId from token exchange
     const profileId = profile.id ?? igUserId;
     if (!profileId) return back({ error: "ig_profile_failed" });
 
@@ -87,12 +91,18 @@ export async function GET(req: Request) {
       return back({ connected: "instagram", count: "0" });
     }
 
+    // Best available display name: full name → username → @id fallback
+    const displayName =
+      profile.name?.trim() ||
+      (profile.username ? `@${profile.username}` : null) ||
+      `@${profileId}`;
+
     await addAccount({
       user_id: userId,
       platform: "instagram",
       account_type: "instagram_business",
       external_id: profileId,
-      display_name: profile.name ?? profile.username ?? "Instagram Account",
+      display_name: displayName,
       avatar_url: profile.profile_picture_url ?? null,
       access_token: finalToken,
     });
